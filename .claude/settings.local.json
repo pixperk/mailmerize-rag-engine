@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/mishr/Desktop/projects/mailmerize/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

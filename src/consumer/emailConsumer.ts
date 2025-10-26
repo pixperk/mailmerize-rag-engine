@@ -1,15 +1,15 @@
-import { getRabbitChannel } from "config/rabbit";
+import { rabbitMQ } from "config/rabbit";
 import { EmailMessage } from "interfaces/email";
 import Groq from "groq-sdk";
 import dotenv from "dotenv";
+import {
+  NotificationService,
+  EmailPriority,
+} from "services/notificationService";
 
 dotenv.config();
 
-enum EmailPriority {
-  HIGH = "high",
-  MEDIUM = "medium",
-  LOW = "low",
-}
+const notificationService = new NotificationService();
 
 const SYSTEM_PROMPT = `
 you are "MAILMERIZER", an assistant that summarizes email content.  
@@ -50,7 +50,7 @@ export const groq = new Groq({
 });
 
 export async function startEmailConsumer() {
-  const channel = getRabbitChannel();
+  const channel = rabbitMQ.getChannel();
   await channel.assertQueue(QUEUE, { durable: true });
 
   console.log(`[email-consumer] listening on queue: ${QUEUE}`);
@@ -77,10 +77,14 @@ export async function startEmailConsumer() {
 async function processEmail(email: EmailMessage) {
   //add to database later
   try {
-    const priority = await categorizeEmailPriority(email);
+    //const priority = await categorizeEmailPriority(email);
+    const priority = await generateRandomPriority();
     console.log(
       `[email-consumer] Email UID: ${email.uid} categorized as priority: ${priority}`
     );
+
+    // Increment counter and check if notification threshold is reached
+    await notificationService.incrementAndCheckThreshold(priority);
   } catch (error) {
     throw new Error(`Failed to process email UID: ${email.uid}: ${error}`);
   }
@@ -119,4 +123,15 @@ async function categorizeEmailPriority(
   } catch (error) {
     throw new Error(`Failed to categorize email priority: ${error}`);
   }
+}
+
+
+async function generateRandomPriority(): Promise<EmailPriority> {
+  const priorities = [
+    EmailPriority.HIGH,
+    EmailPriority.MEDIUM,
+    EmailPriority.LOW,
+  ];
+  const randomIndex = Math.floor(Math.random() * priorities.length);
+  return priorities[randomIndex];
 }

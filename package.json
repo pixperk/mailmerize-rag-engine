@@ -21,9 +21,11 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@types/ioredis": "^4.28.10",
     "amqplib": "^0.10.9",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
-    "groq-sdk": "^0.34.0"
+    "groq-sdk": "^0.34.0",
+    "ioredis": "^5.8.2"
   }
 }

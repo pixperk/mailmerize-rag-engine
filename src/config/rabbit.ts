@@ -1,30 +1,32 @@
 import amqp from "amqplib";
 
-let connection: amqp.ChannelModel;
-let channel: amqp.Channel;
+class RabbitMQConnection {
+  private connection: amqp.ChannelModel | null = null;
+  private channel: amqp.Channel | null = null;
 
-export async function connectRabbitMQ(url: string) {
-  connection = await amqp.connect(url);
-  channel = await connection.createChannel();
-  console.log("[rabbitmq] connected");
-  return { connection, channel };
-}
+  async connect(url: string) {
+    this.connection = await amqp.connect(url);
+    this.channel = await this.connection.createChannel();
+    console.log("[rabbitmq] connected");
+    return { connection: this.connection, channel: this.channel };
+  }
 
-
-export function getRabbitChannel() : amqp.Channel {
-    if (!channel) {
-        throw new Error("[rabbitmq] channel is not initialized");
+  getChannel(): amqp.Channel {
+    if (!this.channel) {
+      throw new Error("[rabbitmq] channel is not initialized");
     }
-    return channel;
-}
+    return this.channel;
+  }
 
-export async function closeRabbitMQ() {
-    if (channel) {
-        await channel.close();
+  async close() {
+    if (this.channel) {
+      await this.channel.close();
     }
-    if (connection) {
-        await connection.close();
+    if (this.connection) {
+      await this.connection.close();
     }
-
     console.log("[rabbitmq] connection closed");
+  }
 }
+
+export const rabbitMQ = new RabbitMQConnection();
