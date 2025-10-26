@@ -8,7 +8,7 @@ export enum EmailPriority {
 }
 
 const NOTIFICATION_THRESHOLDS = {
-  [EmailPriority.HIGH]: 1,
+  [EmailPriority.HIGH]: 2,
   [EmailPriority.MEDIUM]: 2,
   [EmailPriority.LOW]: 5,
 };
@@ -20,10 +20,15 @@ const DEBOUNCE_TTL_SECONDS = 60;
 export class NotificationService {
   private redis = getRedisClient();
 
+  //better the implementation later by redis list or set
+  private emails: EmailMessage[] = [];
+
   async incrementAndCheckThreshold(priority: EmailPriority, email: EmailMessage): Promise<void> {
     const counterKey = `${COUNTER_KEY_PREFIX}${priority}`;
     const debounceKey = `${NOTIFICATION_DEBOUNCE_KEY_PREFIX}${priority}`;
     const newCount = await this.redis.incr(counterKey);
+
+    this.emails.push(email);
 
     const threshold = NOTIFICATION_THRESHOLDS[priority];
 
@@ -39,27 +44,36 @@ export class NotificationService {
       );
 
       if (setResult === "OK") {
-        this.sendNotification(priority, newCount, email);
+        this.sendNotification(priority, newCount);
         await this.redis.set(counterKey, "0");
       }
     }
   }
 
 
-  private sendNotification(priority: EmailPriority, count: number, email: EmailMessage): void {
+  private sendNotification(priority: EmailPriority, count: number): void {
     const timestamp = new Date().toISOString();
     console.log(
       `\n${"=".repeat(60)}\n` +
         `[NOTIFICATION] ${timestamp}\n` +
         `Priority: ${priority.toUpperCase()}\n` +
+       
+        `Threshold reached: ${count} emails processed\n` +
+        `${"=".repeat(60)}\n`
+    );
+
+    this.emails.forEach((email) => {
+      console.log(
         `Email UID: ${email.uid}\n` +
         `Email Subject: ${email.headers.subject}\n` +
         `Email From: ${email.headers.from}\n` +
         `Email To: ${email.headers.to.join(", ")}\n` +
         `Email Date: ${email.headers.date}\n` +
-        `Threshold reached: ${count} emails processed\n` +
-        `${"=".repeat(60)}\n`
-    );
+        `-------------------------\n`
+      );
+    });
+
+    this.emails = [];
   }
 
  
