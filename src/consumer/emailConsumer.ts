@@ -84,7 +84,7 @@ async function processEmail(email: EmailMessage) {
     );
 
     // Increment counter and check if notification threshold is reached
-    await notificationService.incrementAndCheckThreshold(priority);
+    await notificationService.incrementAndCheckThreshold(priority, email);
   } catch (error) {
     throw new Error(`Failed to process email UID: ${email.uid}: ${error}`);
   }
@@ -127,11 +127,12 @@ async function categorizeEmailPriority(
 
 
 async function generateRandomPriority(): Promise<EmailPriority> {
-  const priorities = [
+  return EmailPriority.HIGH;
+  /* const priorities = [
     EmailPriority.HIGH,
     EmailPriority.MEDIUM,
     EmailPriority.LOW,
   ];
   const randomIndex = Math.floor(Math.random() * priorities.length);
-  return priorities[randomIndex];
+  return priorities[randomIndex]; */
 }

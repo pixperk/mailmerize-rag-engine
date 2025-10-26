@@ -1,4 +1,5 @@
 import { getRedisClient } from "config/redis";
+import { EmailMessage } from "interfaces/email";
 
 export enum EmailPriority {
   HIGH = "high",
@@ -19,7 +20,7 @@ const DEBOUNCE_TTL_SECONDS = 60;
 export class NotificationService {
   private redis = getRedisClient();
 
-  async incrementAndCheckThreshold(priority: EmailPriority): Promise<void> {
+  async incrementAndCheckThreshold(priority: EmailPriority, email: EmailMessage): Promise<void> {
     const counterKey = `${COUNTER_KEY_PREFIX}${priority}`;
     const debounceKey = `${NOTIFICATION_DEBOUNCE_KEY_PREFIX}${priority}`;
     const newCount = await this.redis.incr(counterKey);
@@ -36,21 +37,26 @@ export class NotificationService {
         DEBOUNCE_TTL_SECONDS,
         "NX"
       );
-      
+
       if (setResult === "OK") {
-        this.sendNotification(priority, newCount);
+        this.sendNotification(priority, newCount, email);
         await this.redis.set(counterKey, "0");
       }
     }
   }
 
- 
-  private sendNotification(priority: EmailPriority, count: number): void {
+
+  private sendNotification(priority: EmailPriority, count: number, email: EmailMessage): void {
     const timestamp = new Date().toISOString();
     console.log(
       `\n${"=".repeat(60)}\n` +
         `[NOTIFICATION] ${timestamp}\n` +
         `Priority: ${priority.toUpperCase()}\n` +
+        `Email UID: ${email.uid}\n` +
+        `Email Subject: ${email.headers.subject}\n` +
+        `Email From: ${email.headers.from}\n` +
+        `Email To: ${email.headers.to.join(", ")}\n` +
+        `Email Date: ${email.headers.date}\n` +
         `Threshold reached: ${count} emails processed\n` +
         `${"=".repeat(60)}\n`
     );
