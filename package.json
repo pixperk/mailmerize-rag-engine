@@ -16,6 +16,7 @@
     "@types/amqplib": "^0.10.8",
     "@types/express": "^5.0.4",
     "@types/node": "^24.9.1",
+    "drizzle-kit": "^0.31.5",
     "ts-node-dev": "^2.0.0",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.9.3"
@@ -24,8 +25,10 @@
     "@types/ioredis": "^4.28.10",
     "amqplib": "^0.10.9",
     "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.44.7",
     "express": "^5.1.0",
     "groq-sdk": "^0.34.0",
-    "ioredis": "^5.8.2"
+    "ioredis": "^5.8.2",
+    "postgres": "^3.4.7"
   }
 }

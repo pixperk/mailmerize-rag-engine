@@ -20,6 +20,7 @@ interface AttachmentInfo {
 
 export interface EmailMessage {
   uid: number;
+  user_id: string;
   account: string;
   ingested_at: Date | string;
   headers: EmailHeaders;

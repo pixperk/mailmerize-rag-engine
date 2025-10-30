@@ -25,15 +25,17 @@ const AGE_MULTIPLIERS = {
 
 const ACCUMULATED_SCORE_THRESHOLD = 10;
 
-const SCORE_KEY = "email:accumulated:score";
-const NOTIFICATION_DEBOUNCE_KEY = "notification:sent";
+// User-scoped Redis keys for isolation
+const SCORE_KEY = (userId: string) => `email:accumulated:score:${userId}`;
+const NOTIFICATION_DEBOUNCE_KEY = (userId: string) => `notification:sent:${userId}`;
 const DEBOUNCE_TTL_SECONDS = 60; 
 
 export class NotificationService {
   private redis = getRedisClient();
 
   //better the implementation later by redis list or set
-  private emails: EmailMessage[] = [];
+  // Store emails per user
+  private userEmails: Map<string, EmailMessage[]> = new Map();
 
   /**
    * Calculate age multiplier based on how old the email is
@@ -118,15 +120,20 @@ export class NotificationService {
   }
 
   async incrementAndCheckThreshold(priority: EmailPriority, email: EmailMessage): Promise<void> {
+    const userId = email.user_id;
     const score = this.calculateScore(priority, email);
-    const newScore = await this.redis.incrby(SCORE_KEY, score);
+    const newScore = await this.redis.incrby(SCORE_KEY(userId), score);
 
-    this.emails.push(email);
+    // Initialize user's email array if it doesn't exist
+    if (!this.userEmails.has(userId)) {
+      this.userEmails.set(userId, []);
+    }
+    this.userEmails.get(userId)!.push(email);
 
     const ageMultiplier = this.getAgeMultiplier(email.headers.date);
     const ageString = this.getAgeString(email.headers.date);
     console.log(
-      `[notification-service] Email UID: ${email.uid} | Priority: ${priority} | Age: ${ageString} (${ageMultiplier}x) | Score: ${score} points | Total: ${newScore}/${ACCUMULATED_SCORE_THRESHOLD}`
+      `[notification-service] User: ${userId} | Email UID: ${email.uid} | Priority: ${priority} | Age: ${ageString} (${ageMultiplier}x) | Score: ${score} points | Total: ${newScore}/${ACCUMULATED_SCORE_THRESHOLD}`
     );
 
     // Check if threshold is reached
@@ -134,7 +141,7 @@ export class NotificationService {
       // Try to acquire the debounce lock
       // NX = only set if key doesn't exist (not in debounce period)
       const canNotify = await this.redis.set(
-        NOTIFICATION_DEBOUNCE_KEY,
+        NOTIFICATION_DEBOUNCE_KEY(userId),
         "1",
         "EX",
         DEBOUNCE_TTL_SECONDS,
@@ -143,31 +150,35 @@ export class NotificationService {
 
       // If we acquired the lock (not in debounce period), send notification
       if (canNotify === "OK") {
-        this.sendNotification(newScore);
-        await this.redis.set(SCORE_KEY, "0");
+        this.sendNotification(userId, newScore);
+        await this.redis.set(SCORE_KEY(userId), "0");
       } else {
         // Debounce is active - keep accumulating
         console.log(
-          `[notification-service] Score threshold reached (${newScore}) but in debounce period. Emails will accumulate.`
+          `[notification-service] User: ${userId} | Score threshold reached (${newScore}) but in debounce period. Emails will accumulate.`
         );
       }
     }
   }
 
 
-  private sendNotification(accumulatedScore: number): void {
+  private sendNotification(userId: string, accumulatedScore: number): void {
     const timestamp = new Date().toISOString();
+    const userEmails = this.userEmails.get(userId) || [];
+
     console.log(
       `\n${"=".repeat(60)}\n` +
         `[NOTIFICATION] ${timestamp}\n` +
+        `User ID: ${userId}\n` +
         `Accumulated Score Threshold Reached: ${accumulatedScore} points\n` +
-        `Total Emails in Batch: ${this.emails.length}\n` +
+        `Total Emails in Batch: ${userEmails.length}\n` +
         `${"=".repeat(60)}\n`
     );
 
-    this.emails.forEach((email) => {
+    userEmails.forEach((email: EmailMessage) => {
       console.log(
         `Email UID: ${email.uid}\n` +
+        `Account: ${email.account}\n` +
         `Email Subject: ${email.headers.subject}\n` +
         `Email From: ${email.headers.from}\n` +
         `Email To: ${email.headers.to.join(", ")}\n` +
@@ -176,29 +187,33 @@ export class NotificationService {
       );
     });
 
-    this.emails = [];
+    // Clear this user's email batch
+    this.userEmails.set(userId, []);
   }
 
 
-  async getCurrentScore(): Promise<number> {
-    const score = await this.redis.get(SCORE_KEY);
+  async getCurrentScore(userId: string): Promise<number> {
+    const score = await this.redis.get(SCORE_KEY(userId));
     return score ? parseInt(score, 10) : 0;
   }
 
-  async resetScore(): Promise<void> {
-    await this.redis.set(SCORE_KEY, "0");
-    console.log(`[notification-service] Reset accumulated score to 0`);
+  async resetScore(userId: string): Promise<void> {
+    await this.redis.set(SCORE_KEY(userId), "0");
+    this.userEmails.set(userId, []);
+    console.log(`[notification-service] User: ${userId} | Reset accumulated score to 0`);
   }
 
-  async getScoreStatus(): Promise<{
+  async getScoreStatus(userId: string): Promise<{
+    userId: string;
     currentScore: number;
     threshold: number;
     percentageFilled: number;
   }> {
-    const currentScore = await this.getCurrentScore();
+    const currentScore = await this.getCurrentScore(userId);
     const percentageFilled = (currentScore / ACCUMULATED_SCORE_THRESHOLD) * 100;
 
     return {
+      userId,
       currentScore,
       threshold: ACCUMULATED_SCORE_THRESHOLD,
       percentageFilled: Math.round(percentageFilled),
